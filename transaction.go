@@ -35,6 +35,9 @@ type Transaction struct { // WARN: is a `variant` in C++, can be a SignedTransac
 	ContextFreeActions []*Action    `json:"context_free_actions"`
 	Actions            []*Action    `json:"actions"`
 	Extensions         []*Extension `json:"transaction_extensions"`
+
+	// Fee fee is for eosforce
+	Fee                Asset        `json:"fee"`
 }
 
 // NewTransaction creates a transaction. Unless you plan on adding HeadBlockID later, to be complete, opts should contain it.  Sign

@@ -52,6 +52,7 @@ func New(baseURL string) *API {
 		},
 		BaseURL:  baseURL,
 		Compress: CompressionZlib,
+		Debug: true,
 	}
 
 	return api
@@ -516,6 +517,12 @@ func (api *API) GetCurrencyBalance(account AccountName, symbol string, code Acco
 		params["symbol"] = symbol
 	}
 	err = api.call("chain", "get_currency_balance", params, &out)
+	return
+}
+
+// GetFee call /get_required_fee to get fee
+func (api *API) GetFee(tx *Transaction) (out *GetFeeResp, err error) {
+	err = api.call("chain", "get_required_fee", M{"transaction": tx}, &out)
 	return
 }
 

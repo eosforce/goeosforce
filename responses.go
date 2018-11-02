@@ -387,3 +387,6 @@ type ActionsResp struct {
 	Actions               []ActionResp `json:"actions"`
 	LastIrreversibleBlock uint32       `json:"last_irreversible_block"`
 }
+type GetFeeResp struct {
+	Fee Asset       `json:"required_fee"`
+}
