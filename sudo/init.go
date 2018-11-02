@@ -1,6 +1,6 @@
 package sudo
 
-import eos "github.com/eoscanada/eos-go"
+import eos "github.com/eosforce/goeosforce"
 
 func init() {
 	eos.RegisterAction(AN("eosio.sudo"), ActN("exec"), Exec{})

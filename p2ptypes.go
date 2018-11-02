@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
-	"github.com/eoscanada/eos-go/ecc"
+	"github.com/eosforce/goeosforce/ecc"
 )
 
 type P2PMessage interface {

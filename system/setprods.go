@@ -1,8 +1,8 @@
 package system
 
 import (
-	eos "github.com/eoscanada/eos-go"
-	"github.com/eoscanada/eos-go/ecc"
+	eos "github.com/eosforce/goeosforce"
+	"github.com/eosforce/goeosforce/ecc"
 )
 
 // NewSetPriv returns a `setpriv` action that lives on the

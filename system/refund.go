@@ -1,7 +1,7 @@
 package system
 
 import (
-	eos "github.com/eoscanada/eos-go"
+	eos "github.com/eosforce/goeosforce"
 )
 
 // NewRefund returns a `refund` action that lives on the

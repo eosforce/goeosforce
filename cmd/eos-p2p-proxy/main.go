@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/eoscanada/eos-go/p2p"
+	"github.com/eosforce/goeosforce/p2p"
 )
 
 var peer1 = flag.String("peer1", "localhost:9876", "peer 1")

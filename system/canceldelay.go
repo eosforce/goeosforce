@@ -1,6 +1,6 @@
 package system
 
-import "github.com/eoscanada/eos-go"
+import "github.com/eosforce/goeosforce"
 
 // NewCancelDelay creates an action from the `eosio.system` contract
 // called `canceldelay`.

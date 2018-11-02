@@ -5,7 +5,7 @@ import (
 
 	"log"
 
-	"github.com/eoscanada/eos-go"
+	"github.com/eosforce/goeosforce"
 )
 
 type Proxy struct {

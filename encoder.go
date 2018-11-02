@@ -11,7 +11,7 @@ import (
 
 	"math"
 
-	"github.com/eoscanada/eos-go/ecc"
+	"github.com/eosforce/goeosforce/ecc"
 )
 
 // --------------------------------------------------------------
