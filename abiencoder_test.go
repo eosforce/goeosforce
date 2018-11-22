@@ -132,7 +132,7 @@ func TestABIEncoder_encodeMissingActionStruct(t *testing.T) {
 	abi, err := NewABI(strings.NewReader(abiString))
 	assert.NoError(t, err)
 	_, err = abi.EncodeAction(ActionName("action.name.1"), abiData)
-	assert.Equal(t, fmt.Errorf("encode action: encode: structure [struct.name.1] not found in abi"), err)
+	assert.Equal(t, fmt.Errorf("encode action: encode struct [struct.name.1] not found in abi"), err)
 }
 
 func TestABIEncoder_encodeErrorInBase(t *testing.T) {
@@ -163,12 +163,11 @@ func TestABIEncoder_encodeErrorInBase(t *testing.T) {
 	abi, err := NewABI(strings.NewReader(abiString))
 	assert.NoError(t, err)
 	_, err = abi.EncodeAction(ActionName("action.name.1"), abiData)
-	assert.Equal(t, fmt.Errorf("encode action: encode base [struct.name.1]: encode: structure [struct.name.2] not found in abi"), err)
+	assert.Equal(t, fmt.Errorf("encode action: encode base [struct.name.1]: encode struct [struct.name.2] not found in abi"), err)
 }
 
 func TestABIEncoder_encodeField(t *testing.T) {
 
-	//Logger.ABIEncoder.SetOutput(os.Stdout)
 	testCases := []map[string]interface{}{
 		{"caseName": "sunny path", "fieldName": "field_name", "fieldType": "string", "expectedValue": "0f6669656c642e312e76616c75652e31", "json": "{\"field_name\": \"field.1.value.1\"}", "isOptional": false, "isArray": false, "expectedError": nil, "writer": new(bytes.Buffer)},
 		{"caseName": "optional present", "fieldName": "field_name", "fieldType": "string", "expectedValue": "010f6669656c642e312e76616c75652e31", "json": "{\"field_name\": \"field.1.value.1\"}", "isOptional": true, "isArray": false, "expectedError": nil, "writer": new(bytes.Buffer)},
@@ -207,8 +206,6 @@ func TestABIEncoder_encodeField(t *testing.T) {
 }
 
 func TestABI_Write(t *testing.T) {
-
-	//Logger.ABIEncoder.SetOutput(os.Stdout)
 	testCases := []map[string]interface{}{
 		{"caseName": "string", "typeName": "string", "expectedValue": "0e746869732e69732e612e74657374", "json": "{\"testField\":\"this.is.a.test\""},
 		{"caseName": "min int8", "typeName": "int8", "expectedValue": "80", "json": "{\"testField\":-128}"},
@@ -235,16 +232,18 @@ func TestABI_Write(t *testing.T) {
 		{"caseName": "max uint32", "typeName": "uint32", "expectedValue": "ffffffff", "json": "{\"testField\":4294967295}", "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"},
 		{"caseName": "out of range uint32", "typeName": "uint32", "expectedValue": "", "json": "{\"testField\":-1}", "expectedError": fmt.Errorf("writing field: [test_field_name] type uint32 : strconv.ParseUint: parsing \"-1\": invalid syntax")},
 		{"caseName": "out of range uint32", "typeName": "uint32", "expectedValue": "", "json": "{\"testField\":4294967296}", "expectedError": fmt.Errorf("writing field: [test_field_name] type uint32 : strconv.ParseUint: parsing \"4294967296\": value out of range")},
-		{"caseName": "min int64", "typeName": "int64", "expectedValue": "0000000000000080", "json": "{\"testField\":-9223372036854775808}", "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"},
-		{"caseName": "max int64", "typeName": "int64", "expectedValue": "ffffffffffffff7f", "json": "{\"testField\":9223372036854775807}", "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"},
-		{"caseName": "out of range int64", "typeName": "int64", "expectedValue": "", "json": "{\"testField\":-9223372036854775809}", "expectedError": fmt.Errorf("writing field: [test_field_name] type int64 : strconv.ParseInt: parsing \"-9223372036854775809\": value out of range")},
-		{"caseName": "out of range int64", "typeName": "int64", "expectedValue": "", "json": "{\"testField\":9223372036854775808}", "expectedError": fmt.Errorf("writing field: [test_field_name] type int64 : strconv.ParseInt: parsing \"9223372036854775808\": value out of range")},
+		{"caseName": "min int64", "typeName": "int64", "expectedValue": "0000000000000080", "json": "{\"testField\":\"-9223372036854775808\"}", "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"},
+		{"caseName": "mid int64", "typeName": "int64", "expectedValue": "00f0ffffffffffff", "json": "{\"testField\":-4096}", "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"},
+		{"caseName": "max int64", "typeName": "int64", "expectedValue": "ffffffffffffff7f", "json": "{\"testField\":\"9223372036854775807\"}", "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"},
+		{"caseName": "out of range int64 lower", "typeName": "int64", "expectedValue": "", "json": "{\"testField\":-9223372036854775809}", "expectedError": fmt.Errorf("encoding int64: json: cannot unmarshal number -9223372036854775809 into Go value of type int64")},
+		{"caseName": "out of range int64 upper", "typeName": "int64", "expectedValue": "", "json": "{\"testField\":9223372036854775808}", "expectedError": fmt.Errorf("encoding int64: json: cannot unmarshal number 9223372036854775808 into Go value of type int64")},
 		{"caseName": "min uint64", "typeName": "uint64", "expectedValue": "0000000000000000", "json": "{\"testField\":0}", "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"},
-		{"caseName": "max uint64", "typeName": "uint64", "expectedValue": "ffffffffffffffff", "json": "{\"testField\":18446744073709551615}", "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"},
-		{"caseName": "out of range uint64", "typeName": "uint64", "expectedValue": "", "json": "{\"testField\":-1}", "expectedError": fmt.Errorf("writing field: [test_field_name] type uint64 : strconv.ParseUint: parsing \"-1\": invalid syntax")},
-		{"caseName": "out of range uint64", "typeName": "uint64", "expectedValue": "", "json": "{\"testField\":18446744073709551616}", "expectedError": fmt.Errorf("writing field: [test_field_name] type uint64 : strconv.ParseUint: parsing \"18446744073709551616\": value out of range")},
-		{"caseName": "int128 unsupported", "typeName": "int128", "expectedValue": "", "json": "{\"testField\":18446744073709551616}", "expectedError": fmt.Errorf("writing field: int128 support not implemented")},
-		{"caseName": "uint128 unsupported", "typeName": "uint128", "expectedValue": "", "json": "{\"testField\":18446744073709551616}", "expectedError": fmt.Errorf("writing field: uint128 support not implemented")},
+		{"caseName": "mid uint64", "typeName": "uint64", "expectedValue": "c06ddb095f285813", "json": "{\"testField\":\"1393908473323548096\"}", "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"},
+		{"caseName": "max uint64", "typeName": "uint64", "expectedValue": "ffffffffffffffff", "json": "{\"testField\":\"18446744073709551615\"}", "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"},
+		{"caseName": "out of range uint64 lower", "typeName": "uint64", "expectedValue": "", "json": "{\"testField\":-1}", "expectedError": fmt.Errorf("encoding uint64: json: cannot unmarshal number -1 into Go value of type uint64")},
+		{"caseName": "out of range uint64 upper", "typeName": "uint64", "expectedValue": "", "json": "{\"testField\":18446744073709551616}", "expectedError": fmt.Errorf("encoding uint64: json: cannot unmarshal number 18446744073709551616 into Go value of type uint64")},
+		{"caseName": "int128", "typeName": "int128", "expectedValue": "01020000000000000200000000000000", "json": "{\"testField\":\"0x01020000000000000200000000000000\"}"},
+		{"caseName": "uint128", "typeName": "uint128", "expectedValue": "01000000000000000200000000000000", "json": "{\"testField\":\"0x01000000000000000200000000000000\"}"},
 		{"caseName": "varint32", "typeName": "varint32", "expectedValue": "00000080", "json": "{\"testField\":-2147483648}", "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"},
 		{"caseName": "varuint32", "typeName": "varuint32", "expectedValue": "ffffffff", "json": "{\"testField\":4294967295}", "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"}, //{"caseName": "min varuint32", "typeName": "varuint32", "expectedValue": "0", "json": Varuint32(0), "expectedError": nil, "isOptional": false, "isArray": false, "fieldName": "testedField"},
 		{"caseName": "min float32", "typeName": "float32", "expectedValue": "01000000", "json": "{\"testField\":0.000000000000000000000000000000000000000000001401298464324817}", "expectedError": nil},
@@ -253,7 +252,7 @@ func TestABI_Write(t *testing.T) {
 		{"caseName": "min float64", "typeName": "float64", "expectedValue": "0100000000000000", "json": "{\"testField\":0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005}", "expectedError": nil},
 		{"caseName": "max float64", "typeName": "float64", "expectedValue": "ffffffffffffef7f", "json": "{\"testField\":179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000}", "expectedError": nil},
 		{"caseName": "err float64", "typeName": "float64", "expectedValue": "ffffffffffffef7f", "json": "{\"testField\":279769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000}", "expectedError": fmt.Errorf("writing field: [test_field_name] type float64 : strconv.ParseFloat: parsing \"279769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\": value out of range")},
-		{"caseName": "float128 unsupported", "typeName": "float128", "expectedValue": "", "json": "{\"testField\":0}", "expectedError": fmt.Errorf("writing field: float128 support not implemented")},
+		{"caseName": "float128", "typeName": "float128", "expectedValue": "ffffffffffffef7fffffffffffffef7f", "json": "{\"testField\":\"0xffffffffffffef7fffffffffffffef7f\"}"},
 		{"caseName": "bool true", "typeName": "bool", "expectedValue": "01", "json": "{\"testField\":true}", "expectedError": nil},
 		{"caseName": "bool false", "typeName": "bool", "expectedValue": "00", "json": "{\"testField\":false}", "expectedError": nil},
 		{"caseName": "time_point", "typeName": "time_point", "expectedValue": "0100000000000000", "json": "{\"testField\":\"1970-01-01T00:00:00.001\"", "expectedError": nil},
@@ -263,7 +262,7 @@ func TestABI_Write(t *testing.T) {
 		{"caseName": "block_timestamp_type", "typeName": "block_timestamp_type", "expectedValue": "76c52223", "json": "{\"testField\":\"2018-09-05T12:48:54-04:00\"}", "expectedError": nil},
 		{"caseName": "block_timestamp_type err", "typeName": "block_timestamp_type", "expectedValue": "76c52223", "json": "{\"testField\":\"this is not a date\"}", "expectedError": fmt.Errorf("writing field: block_timestamp_type: parsing time \"this is not a date\" as \"2006-01-02T15:04:05.999999-07:00\": cannot parse \"this is not a date\" as \"2006\"")},
 		{"caseName": "Name", "typeName": "name", "expectedValue": "0000000000ea3055", "json": "{\"testField\":\"eosio\"}", "expectedError": nil},
-		{"caseName": "Name", "typeName": "name", "expectedValue": "", "json": "{\"testField\":\"waytolongnametomakethetestcrash\"}", "expectedError": fmt.Errorf("writing field: name: waytolongnametomakethetestcrash is to long. expexted length of max 12 characters")},
+		{"caseName": "Name", "typeName": "name", "expectedValue": "", "json": "{\"testField\":\"waytolongnametomakethetestcrash\"}", "expectedError": fmt.Errorf("writing field: name: waytolongnametomakethetestcrash is to long. expected length of max 12 characters")},
 		{"caseName": "bytes", "typeName": "bytes", "expectedValue": "0e746869732e69732e612e74657374", "json": "{\"testField\":\"746869732e69732e612e74657374\"}", "expectedError": nil},
 		{"caseName": "bytes err", "typeName": "bytes", "expectedValue": "0e746869732e69732e612e74657374", "json": "{\"testField\":\"those are not bytes\"}", "expectedError": fmt.Errorf("writing field: bytes: encoding/hex: invalid byte: U+0074 't'")},
 		{"caseName": "checksum160", "typeName": "checksum160", "expectedValue": "0000000000000000000000000000000000000000", "json": "{\"testField\":\"0000000000000000000000000000000000000000\"}", "expectedError": nil},
@@ -311,6 +310,9 @@ func TestABI_Write(t *testing.T) {
 			fieldName := "test_field_name"
 			result := gjson.Get(c["json"].(string), "testField")
 			err := abi.writeField(encoder, fieldName, c["typeName"].(string), result)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
 			assert.Equal(t, c["expectedError"], err, c["caseName"])
 
 			if c["expectedError"] == nil {

@@ -18,11 +18,13 @@ import (
 )
 
 type API struct {
-	HttpClient              *http.Client
-	BaseURL                 string
-	Signer                  Signer
-	Debug                   bool
-	Compress                CompressionType
+	HttpClient *http.Client
+	BaseURL    string
+	Signer     Signer
+	Debug      bool
+	Compress   CompressionType
+	// Header is one or more headers to be added to all outgoing calls
+	Header                  http.Header
 	DefaultMaxCPUUsageMS    uint8
 	DefaultMaxNetUsageWords uint32 // in 8-bytes words
 
@@ -52,6 +54,7 @@ func New(baseURL string) *API {
 		},
 		BaseURL:  baseURL,
 		Compress: CompressionZlib,
+		Header:   make(http.Header),
 		Debug: true,
 	}
 
@@ -156,14 +159,14 @@ func (api *API) GetCode(account AccountName) (out *GetCodeResp, err error) {
 	return
 }
 
-func (api *API) GetCodeHash(account AccountName) (out SHA256Bytes, err error) {
+func (api *API) GetCodeHash(account AccountName) (out Checksum256, err error) {
 	resp := GetCodeHashResp{}
 	if err = api.call("chain", "get_code_hash", M{"account_name": account}, &resp); err != nil {
 		return
 	}
 
 	buffer, err := hex.DecodeString(resp.CodeHash)
-	return SHA256Bytes(buffer), err
+	return Checksum256(buffer), err
 }
 
 func (api *API) GetABI(account AccountName) (out *GetABIResp, err error) {
@@ -321,7 +324,7 @@ func (api *API) SignPushActionsWithOpts(actions []*Action, opts *TxOptions) (out
 
 // SignPushTransaction will sign a transaction and submit it to the
 // chain.
-func (api *API) SignPushTransaction(tx *Transaction, chainID SHA256Bytes, compression CompressionType) (out *PushTransactionFullResp, err error) {
+func (api *API) SignPushTransaction(tx *Transaction, chainID Checksum256, compression CompressionType) (out *PushTransactionFullResp, err error) {
 	_, packed, err := api.SignTransaction(tx, chainID, compression)
 	if err != nil {
 		return nil, err
@@ -340,7 +343,7 @@ func (api *API) SignPushTransaction(tx *Transaction, chainID SHA256Bytes, compre
 //
 // To sign a transaction, you need a Signer defined on the `API`
 // object. See SetSigner.
-func (api *API) SignTransaction(tx *Transaction, chainID SHA256Bytes, compression CompressionType) (*SignedTransaction, *PackedTransaction, error) {
+func (api *API) SignTransaction(tx *Transaction, chainID Checksum256, compression CompressionType) (*SignedTransaction, *PackedTransaction, error) {
 	if api.Signer == nil {
 		return nil, nil, fmt.Errorf("no Signer configured")
 	}
@@ -378,6 +381,11 @@ func (api *API) SignTransaction(tx *Transaction, chainID SHA256Bytes, compressio
 // PushTransaction submits a properly filled (tapos), packed and
 // signed transaction to the blockchain.
 func (api *API) PushTransaction(tx *PackedTransaction) (out *PushTransactionFullResp, err error) {
+	err = api.call("chain", "push_transaction", tx, &out)
+	return
+}
+
+func (api *API) PushTransactionRaw(tx *PackedTransaction) (out json.RawMessage, err error) {
 	err = api.call("chain", "push_transaction", tx, &out)
 	return
 }
@@ -540,6 +548,13 @@ func (api *API) call(baseAPI string, endpoint string, body interface{}, out inte
 		return fmt.Errorf("NewRequest: %s", err)
 	}
 
+	for k, v := range api.Header {
+		if req.Header == nil {
+			req.Header = http.Header{}
+		}
+		req.Header[k] = append(req.Header[k], v...)
+	}
+
 	if api.Debug {
 		// Useful when debugging API calls
 		requestDump, err := httputil.DumpRequest(req, true)
@@ -564,10 +579,18 @@ func (api *API) call(baseAPI string, endpoint string, body interface{}, out inte
 	}
 
 	if resp.StatusCode == 404 {
-		return ErrNotFound
+		var apiErr APIError
+		if err := json.Unmarshal(cnt.Bytes(), &apiErr); err != nil {
+			return ErrNotFound
+		}
+		return apiErr
 	}
 	if resp.StatusCode > 299 {
-		return fmt.Errorf("%s: status code=%d, body=%s", req.URL.String(), resp.StatusCode, cnt.String())
+		var apiErr APIError
+		if err := json.Unmarshal(cnt.Bytes(), &apiErr); err != nil {
+			return fmt.Errorf("%s: status code=%d, body=%s", req.URL.String(), resp.StatusCode, cnt.String())
+		}
+		return apiErr
 	}
 
 	if api.Debug {
