@@ -6,18 +6,18 @@ import "github.com/eosforce/goeosforce"
 // `eosio.bios` contract. It should exist only when booting a new
 // network, as it is replaced using the `eos-bios` boot process by the
 // `eosio.system` contract.
-func NewVoteProducer(voter eos.AccountName, proxy eos.AccountName, producers ...eos.AccountName) *eos.Action {
+func NewVoteProducer(voter eos.AccountName, bpName eos.AccountName, amount eos.Asset) *eos.Action {
 	a := &eos.Action{
 		Account: AN("eosio"),
-		Name:    ActN("voteproducer"),
+		Name:    ActN("vote"),
 		Authorization: []eos.PermissionLevel{
 			{Actor: voter, Permission: PN("active")},
 		},
 		ActionData: eos.NewActionData(
 			VoteProducer{
 				Voter:     voter,
-				Proxy:     proxy,
-				Producers: producers,
+				BpName:     bpName,
+				Amount: amount,
 			},
 		),
 	}
@@ -27,6 +27,6 @@ func NewVoteProducer(voter eos.AccountName, proxy eos.AccountName, producers ...
 // VoteProducer represents the `eosio.system::voteproducer` action
 type VoteProducer struct {
 	Voter     eos.AccountName   `json:"voter"`
-	Proxy     eos.AccountName   `json:"proxy"`
-	Producers []eos.AccountName `json:"producers"`
+	BpName    eos.AccountName   `json:"proxy"`
+	Amount 	  eos.Asset `json:"amount"`
 }

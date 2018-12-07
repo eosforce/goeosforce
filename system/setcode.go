@@ -108,6 +108,23 @@ func NewSetABI(account eos.AccountName, abiPath string) (out *eos.Action, err er
 	}, nil
 }
 
+//
+func NewSetPermission(account eos.AccountName,auth eos.Authority, permission eos.PermissionName,parent eos.PermissionName) (out *eos.Action, err error) {
+	return &eos.Action{
+		Account: AN("eosio"),
+		Name:    ActN("updateauth"),
+		Authorization: []eos.PermissionLevel{
+			{account,  parent},
+		},
+		ActionData: eos.NewActionData(SetAuth{
+			Account: account,
+			Permission:permission,
+			Parent:parent,
+			Auth:auth,
+		}),
+	}, nil
+}
+
 // NewSetCodeTx is _deprecated_. Use NewSetContract instead, and build
 // your transaction yourself.
 func NewSetCodeTx(account eos.AccountName, wasmPath, abiPath string) (out *eos.Transaction, err error) {
@@ -130,4 +147,11 @@ type SetCode struct {
 type SetABI struct {
 	Account eos.AccountName `json:"account"`
 	ABI     eos.HexBytes    `json:"abi"`
+}
+
+type SetAuth struct {
+	Account eos.AccountName `json:"account"`
+	Permission eos.PermissionName `json:"perssion"`
+	Parent eos.PermissionName `json:"parent"`
+	Auth eos.Authority `json:"auth"`
 }

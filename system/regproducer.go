@@ -7,18 +7,18 @@ import (
 
 // NewRegProducer returns a `regproducer` action that lives on the
 // `eosio.system` contract.
-func NewRegProducer(producer eos.AccountName, producerKey ecc.PublicKey, url string, location uint16) *eos.Action {
+func NewRegProducer(producer eos.AccountName, producerKey ecc.PublicKey, url string, commissionRate int32) *eos.Action {
 	return &eos.Action{
 		Account: AN("eosio"),
-		Name:    ActN("regproducer"),
+		Name:    ActN("updatebp"),
 		Authorization: []eos.PermissionLevel{
 			{Actor: producer, Permission: PN("active")},
 		},
 		ActionData: eos.NewActionData(RegProducer{
 			Producer:    producer,
 			ProducerKey: producerKey,
+			CommissionRate: commissionRate,
 			URL:         url,
-			Location:    location,
 		}),
 	}
 }
@@ -27,6 +27,6 @@ func NewRegProducer(producer eos.AccountName, producerKey ecc.PublicKey, url str
 type RegProducer struct {
 	Producer    eos.AccountName `json:"producer"`
 	ProducerKey ecc.PublicKey   `json:"producer_key"`
+	CommissionRate int32		`json:"commission_rate"`
 	URL         string          `json:"url"`
-	Location    uint16          `json:"location"` // what,s the meaning of that anyway ?
 }
