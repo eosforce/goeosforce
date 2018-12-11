@@ -3,6 +3,7 @@ package ecc
 import (
 	"fmt"
 	"github.com/eosforce/goeosforce/btcsuite/btcd/btcec"
+
 )
 
 type innerR1PublicKey struct {
@@ -17,6 +18,6 @@ func (p *innerR1PublicKey) key(content []byte) (*btcec.PublicKey, error) {
 	return key, nil
 }
 
-func (p *innerR1PublicKey) string(content []byte, curveID CurveID) string {
-	return PublicKeyR1Prefix + "0000000000000000000000000000000000000000000000"
+func (p *innerR1PublicKey) prefix() string {
+	return PublicKeyR1Prefix
 }
