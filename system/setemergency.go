@@ -24,5 +24,5 @@ func NewSetemergency(producer eos.AccountName,Emergency bool) *eos.Action {
 // RegProducer represents the `eosio.system::regproducer` action
 type Setemergency struct {
 	Producer    eos.AccountName `json:"producer"`
-	Emergency	bool
+	Emergency	bool	`json:"emergency"`
 }
