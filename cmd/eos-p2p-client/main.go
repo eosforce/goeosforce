@@ -9,8 +9,8 @@ import (
 	"github.com/eosforce/goeosforce/p2p"
 )
 
-var peer = flag.String("peer", "localhost:9876", "peer to connect to")
-var chainID = flag.String("chain-id", "cf057bbfb72640471fd910bcb67639c22df9f92470936cddc1ade0e2f2e7dc4f", "net chainID to connect to")
+var peer = flag.String("peer", "127.0.0.1:27041", "peer to connect to")
+var chainID = flag.String("chain-id", "bd61ae3a031e8ef2f97ee3b0e62776d6d30d4833c8f7c1645c657b149151004b", "net chainID to connect to")
 var showLog = flag.Bool("v", false, "show detail log")
 
 func main() {
@@ -32,7 +32,7 @@ func main() {
 			ChainID:      cID,
 			HeadBlockNum: 1,
 		}),
-		false,
+		true,
 	)
 
 	client.RegisterHandler(p2p.StringLoggerHandler)

@@ -10,8 +10,8 @@ import (
 )
 
 var peer1 = flag.String("peer1", "localhost:9876", "peer 1")
-var peer2 = flag.String("peer2", "localhost:2222", "peer 2")
-var chainID = flag.String("chain-id", "308cae83a690640be3726a725dde1fa72a845e28cfc63f28c3fa0a6ccdb6faf0", "peer 1")
+var peer2 = flag.String("peer2", "localhost:27041", "peer 2")
+var chainID = flag.String("chain-id", "bd61ae3a031e8ef2f97ee3b0e62776d6d30d4833c8f7c1645c657b149151004b", "peer 1")
 var showLog = flag.Bool("v", false, "show detail log")
 
 func main() {
