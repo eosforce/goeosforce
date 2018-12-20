@@ -324,6 +324,11 @@ func (a *ABI) writeField(binaryEncoder *Encoder, fieldName string, fieldType str
 			return fmt.Errorf("writing field: extended_asset: %s", err)
 		}
 		object = extendedAsset
+	case "account_name":
+		if len(value.Str) > 12 {
+			return fmt.Errorf("writing field: name: %s is to long. expected length of max 12 characters", value.Str)
+		}
+		object = Name(value.Str)
 	default:
 		return fmt.Errorf("writing field of type [%s]: unknown type", fieldType)
 	}
