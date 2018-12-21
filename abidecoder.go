@@ -235,6 +235,8 @@ func (a *ABI) read(binaryDecoder *Decoder, fieldName string, fieldType string, j
 		value, err = binaryDecoder.ReadAsset()
 	case "extended_asset":
 		value, err = binaryDecoder.ReadExtendedAsset()
+	case "account_name":
+		value, err = binaryDecoder.ReadName()
 	default:
 		return nil, fmt.Errorf("read field of type [%s]: unknown type", fieldType)
 	}
