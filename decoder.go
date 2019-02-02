@@ -668,7 +668,9 @@ func (d *Decoder) ReadSignature() (out ecc.Signature, err error) {
 		err = fmt.Errorf("signature required [%d] bytes, remaining [%d]", TypeSize.Signature, d.remaining())
 		return
 	}
+
 	sigContent := make([]byte, 66)
+	copy(sigContent, d.data[d.pos:d.pos+TypeSize.Signature])
 
 	out, err = ecc.NewSignatureFromData(sigContent)
 	if err != nil {
@@ -757,7 +759,7 @@ func (d *Decoder) ReadAsset() (out Asset, err error) {
 	d.pos += 7
 
 	out = Asset{}
-	out.Amount = amount
+	out.Amount = Int64(amount)
 	out.Precision = precision
 	out.Symbol.Symbol = strings.TrimRight(string(data), "\x00")
 	decoderLog.Debug("read asset", zap.Stringer("value", out))
@@ -818,8 +820,10 @@ func (d *Decoder) ReadActionData(action *Action) (err error) {
 
 	var decodeInto reflect.Type
 	if actionMap != nil {
+
 		objType := actionMap[action.Name]
 		if objType != nil {
+			decoderLog.Debug("read object", zap.String("type", objType.Name()))
 			decodeInto = objType
 			decoderLog.Debug("read object", zap.String("type", objType.Name()))
 		}

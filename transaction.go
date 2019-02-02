@@ -183,6 +183,7 @@ func (s *SignedTransaction) Pack(compression CompressionType) (*PackedTransactio
 		Compression:           compression,
 		PackedContextFreeData: rawcfd,
 		PackedTransaction:     rawtrx,
+		wasPackedLocally:      true,
 	}
 
 	return packed, nil
@@ -196,29 +197,30 @@ type PackedTransaction struct {
 	Compression           CompressionType `json:"compression"` // in C++, it's an enum, not sure how it Binary-marshals..
 	PackedContextFreeData HexBytes        `json:"packed_context_free_data"`
 	PackedTransaction     HexBytes        `json:"packed_trx"`
+
+	wasPackedLocally bool
 }
 
+// ID returns the hash of a transaction.
 func (p *PackedTransaction) ID() (Checksum256, error) {
 	h := sha256.New()
 
-	if p.Compression == CompressionZlib {
-		var err error
-		zReader, err := zlib.NewReader(bytes.NewBuffer(p.PackedTransaction))
-		if err != nil {
-			return nil, fmt.Errorf("getting zlib reader, %v", err)
-		}
-		defer zReader.Close()
-
-		data, err := ioutil.ReadAll(zReader)
-		if err != nil {
-			return nil, fmt.Errorf("reading all data from zlib, %v", err)
-		}
-
-		_, _ = h.Write(data)
+	if p.wasPackedLocally {
+		_, _ = h.Write(p.PackedTransaction)
 		return h.Sum(nil), nil
 	}
 
-	_, _ = h.Write(p.PackedTransaction)
+	signed, err := p.UnpackBare()
+	if err != nil {
+		return nil, err
+	}
+
+	repacked, err := signed.Pack(CompressionNone)
+	if err != nil {
+		return nil, err
+	}
+
+	_, _ = h.Write(repacked.PackedTransaction)
 	return h.Sum(nil), nil
 }
 

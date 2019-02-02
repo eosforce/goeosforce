@@ -420,7 +420,7 @@ func TestNewAsset(t *testing.T) {
 	for _, test := range tests {
 		asset, err := NewAsset(test.in)
 		require.NoError(t, err)
-		assert.Equal(t, asset.Amount, int64(test.amount))
+		assert.Equal(t, asset.Amount, Int64(test.amount))
 		assert.Equal(t, asset.Symbol.Symbol, test.symbol)
 		assert.Equal(t, asset.Symbol.Precision, uint8(test.precision))
 	}
@@ -473,7 +473,7 @@ func TestNewEOSAssetFromString(t *testing.T) {
 	for _, test := range tests {
 		asset, err := NewEOSAssetFromString(test.in)
 		require.NoError(t, err)
-		assert.Equal(t, asset.Amount, int64(test.amount))
+		assert.Equal(t, asset.Amount, Int64(test.amount))
 		assert.Equal(t, asset.Symbol.Symbol, "EOS")
 		assert.Equal(t, asset.Symbol.Precision, uint8(4))
 	}
@@ -516,4 +516,25 @@ func EqualNoDiff(t *testing.T, expected interface{}, actual interface{}, message
 	}
 
 	return true
+}
+
+func TestBlob(t *testing.T) {
+	b := Blob("RU9TIEdv")
+
+	t.Run("String", func(tt *testing.T) {
+		assert.Equal(tt, "RU9TIEdv", b.String())
+	})
+
+	t.Run("Data", func(tt *testing.T) {
+		data, err := b.Data()
+		require.Nil(tt, err)
+		assert.Equal(tt, []byte("EOS Go"), data)
+	})
+
+	t.Run("malformed data", func(tt *testing.T) {
+		b := Blob("not base64")
+		data, err := b.Data()
+		require.Equal(tt, "illegal base64 data at input byte 3", err.Error())
+		assert.Empty(tt, data)
+	})
 }

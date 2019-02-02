@@ -1,6 +1,7 @@
 package eos
 
 import (
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -130,7 +131,7 @@ func (b *Bool) UnmarshalJSON(data []byte) error {
 
 // NOTE: there's also ExtendedAsset which is a quantity with the attached contract (AccountName)
 type Asset struct {
-	Amount int64
+	Amount Int64
 	Symbol
 }
 
@@ -222,7 +223,7 @@ func NewEOSAssetFromString(amount string) (out Asset, err error) {
 }
 
 func NewEOSAsset(amount int64) Asset {
-	return Asset{Amount: amount, Symbol: EOSSymbol}
+	return Asset{Amount: Int64(amount), Symbol: EOSSymbol}
 }
 
 // NewAsset parses a string like `1000.0000 EOS` into a properly setup Asset
@@ -249,7 +250,7 @@ func NewAsset(in string) (out Asset, err error) {
 		return out, err
 	}
 
-	out.Amount = val
+	out.Amount = Int64(val)
 
 	return
 }
@@ -796,4 +797,20 @@ func (i *Uint128) UnmarshalJSON(data []byte) error {
 	i.Hi = hiUint
 
 	return nil
+}
+
+// Blob
+
+// Blob is base64 encoded data
+// https://github.com/EOSIO/fc/blob/0e74738e938c2fe0f36c5238dbc549665ddaef82/include/fc/variant.hpp#L47
+type Blob string
+
+// Data returns decoded base64 data
+func (b Blob) Data() ([]byte, error) {
+	return base64.StdEncoding.DecodeString(string(b))
+}
+
+// String returns the blob as a string
+func (b Blob) String() string {
+	return string(b)
 }

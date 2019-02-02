@@ -504,8 +504,18 @@ func (api *API) GetTransactions(name AccountName) (out *TransactionsResp, err er
 	return
 }
 
+func (api *API) GetTableByScope(params GetTableByScopeRequest) (out *GetTableByScopeResp, err error) {
+	err = api.call("chain", "get_table_by_scope", params, &out)
+	return
+}
+
 func (api *API) GetTableRows(params GetTableRowsRequest) (out *GetTableRowsResp, err error) {
 	err = api.call("chain", "get_table_rows", params, &out)
+	return
+}
+
+func (api *API) GetRawABI(params GetRawABIRequest) (out *GetRawABIResp, err error) {
+	err = api.call("chain", "get_raw_abi", params, &out)
 	return
 }
 
@@ -531,6 +541,16 @@ func (api *API) GetCurrencyBalance(account AccountName, symbol string, code Acco
 // GetFee call /get_required_fee to get fee
 func (api *API) GetFee(tx *Transaction) (out *GetFeeResp, err error) {
 	err = api.call("chain", "get_required_fee", M{"transaction": tx}, &out)
+	return
+}
+
+func (api *API) GetCurrencyStats(code AccountName, symbol string) (out *GetCurrencyStatsResp, err error) {
+	params := M{"code": code, "symbol": symbol}
+
+	outWrapper := make(map[string]*GetCurrencyStatsResp)
+	err = api.call("chain", "get_currency_stats", params, &outWrapper)
+	out = outWrapper[symbol]
+
 	return
 }
 
