@@ -498,6 +498,16 @@ func (api *API) GetActions(params GetActionsRequest) (out *ActionsResp, err erro
 	return
 }
 
+func (api *API) GetKeyAccounts(publicKey string) (out *KeyAccountsResp, err error) {
+	err = api.call("history", "get_key_accounts", M{"public_key": publicKey}, &out)
+	return
+}
+
+func (api *API) GetControlledAccounts(controllingAccount string) (out *ControlledAccountsResp, err error) {
+	err = api.call("history", "get_controlled_accounts", M{"controlling_account": controllingAccount}, &out)
+	return
+}
+
 func (api *API) GetTransactions(name AccountName) (out *TransactionsResp, err error) {
 	err = api.call("account_history", "get_transactions", M{"account_name": name}, &out)
 	return
@@ -604,11 +614,19 @@ func (api *API) call(baseAPI string, endpoint string, body interface{}, out inte
 		}
 		return apiErr
 	}
+
 	if resp.StatusCode > 299 {
 		var apiErr APIError
 		if err := json.Unmarshal(cnt.Bytes(), &apiErr); err != nil {
 			return fmt.Errorf("%s: status code=%d, body=%s", req.URL.String(), resp.StatusCode, cnt.String())
 		}
+
+		// Handle cases where some API calls (/v1/chain/get_account for example) returns a 500
+		// error when retrieving data that does not exist.
+		if apiErr.IsUnknownKeyError() {
+			return ErrNotFound
+		}
+
 		return apiErr
 	}
 
