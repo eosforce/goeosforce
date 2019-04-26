@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	eos "github.com/eoscanada/eos-go"
+	eos "github.com/eosforce/goeosforce"
 )
 
 func ExampleABI_DecodeTableRowTyped() {
