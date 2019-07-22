@@ -385,13 +385,34 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 func (d *Decoder) decodeStruct(v interface{}, t reflect.Type, rv reflect.Value) (err error) {
 	l := rv.NumField()
 
+	seenBinaryExtensionField := false
 	for i := 0; i < l; i++ {
-
-		if tag := t.Field(i).Tag.Get("eos"); tag == "-" {
+		tag := t.Field(i).Tag.Get("eos")
+		if tag == "-" {
 			continue
 		}
 
 		typeField := t.Field(i)
+
+		if tag != "binary_extension" && seenBinaryExtensionField {
+			panic(fmt.Sprintf("the `eos: \"binary_extension\"` tags must be packed together at the end of struct fields, problematic field %s", typeField.Name))
+		}
+
+		if tag == "binary_extension" {
+			seenBinaryExtensionField = true
+
+			// FIXME: This works only if what is in `d.data` is the actual full data buffer that
+			//        needs to be decoded. If there is for example two structs in the buffer, this
+			//        will not work as we would continue into the next struct.
+			//
+			//        But at the same time, does it make sense otherwise? What would be the inference
+			//        rule in the case of extra bytes available? Continue decoding and revert if it's
+			//        not working? But how to detect valid errors?
+			if len(d.data[d.pos:]) <= 0 {
+				continue
+			}
+		}
+
 		if v := rv.Field(i); v.CanSet() && typeField.Name != "_" {
 			iface := v.Addr().Interface()
 			decoderLog.Debug("field", zap.String("name", typeField.Name))
@@ -793,26 +814,24 @@ func (d *Decoder) ReadExtendedAsset() (out ExtendedAsset, err error) {
 }
 
 func (d *Decoder) ReadSymbol() (out *Symbol, err error) {
+	rawValue, err := d.ReadUint64()
+	if err != nil {
+		return out, fmt.Errorf("read symbol: %s", err)
+	}
 
-	precision, err := d.ReadUInt8()
-	if err != nil {
-		return out, fmt.Errorf("read symbol: read precision: %s", err)
-	}
-	symbol, err := d.ReadString()
-	if err != nil {
-		return out, fmt.Errorf("read symbol: read symbol: %s", err)
-	}
+	precision := uint8(rawValue & 0xFF)
+	symbolCode := SymbolCode(rawValue >> 8).String()
 
 	out = &Symbol{
 		Precision: precision,
-		Symbol:    symbol,
+		Symbol:    symbolCode,
 	}
-	decoderLog.Debug("read symbol", zap.String("symbol", symbol), zap.Uint8("precision", precision))
+
+	decoderLog.Debug("read symbol", zap.String("symbol", symbolCode), zap.Uint8("precision", precision))
 	return
 }
 
 func (d *Decoder) ReadSymbolCode() (out SymbolCode, err error) {
-
 	n, err := d.ReadUint64()
 	out = SymbolCode(n)
 
@@ -881,6 +900,10 @@ func (d *Decoder) ReadP2PMessageEnvelope() (out *Packet, err error) {
 
 func (d *Decoder) remaining() int {
 	return len(d.data) - d.pos
+}
+
+func (d *Decoder) hasRemaining() bool {
+	return d.remaining() > 0
 }
 
 func UnmarshalBinaryReader(reader io.Reader, v interface{}) (err error) {

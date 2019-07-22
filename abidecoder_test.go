@@ -457,6 +457,141 @@ func TestABI_decode_StructFieldArrayType_HasSjsonPathLikeName(t *testing.T) {
 	assert.JSONEq(t, `{"item.1":[1,10]}`, string(json))
 }
 
+func TestABI_decode_StructVariantField(t *testing.T) {
+	abi := &ABI{
+		Variants: []VariantDef{
+			{
+				Name:  "variant_",
+				Types: []string{"name", "uint32"},
+			},
+		},
+		Structs: []StructDef{
+			{
+				Name: "root",
+				Fields: []FieldDef{
+					{Name: "name", Type: "variant_"},
+				},
+			},
+		},
+	}
+
+	buffer, err := hex.DecodeString("00000050df45e3aec2")
+	require.NoError(t, err)
+
+	json, err := abi.decode(NewDecoder(buffer), "root")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"name":"serialize"}`, string(json))
+
+	buffer, err = hex.DecodeString("0164000000")
+	require.NoError(t, err)
+
+	json, err = abi.decode(NewDecoder(buffer), "root")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"name":100}`, string(json))
+}
+
+func TestABI_decode_StructVariantField_OneOfVariantIsAlias(t *testing.T) {
+	abi := &ABI{
+		Types: []ABIType{
+			ABIType{Type: "name", NewTypeName: "my_name"},
+		},
+		Variants: []VariantDef{
+			{
+				Name:  "variant_",
+				Types: []string{"my_name", "uint32"},
+			},
+		},
+		Structs: []StructDef{
+			{
+				Name: "root",
+				Fields: []FieldDef{
+					{Name: "name", Type: "variant_"},
+				},
+			},
+		},
+	}
+
+	buffer, err := hex.DecodeString("00000050df45e3aec2")
+	require.NoError(t, err)
+
+	json, err := abi.decode(NewDecoder(buffer), "root")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"name":"serialize"}`, string(json))
+
+	buffer, err = hex.DecodeString("0164000000")
+	require.NoError(t, err)
+
+	json, err = abi.decode(NewDecoder(buffer), "root")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"name":100}`, string(json))
+}
+
+func TestABI_decode_StructAliasToAVariantField(t *testing.T) {
+	abi := &ABI{
+		Types: []ABIType{
+			ABIType{Type: "variant_", NewTypeName: "my_variant"},
+		},
+		Variants: []VariantDef{
+			{
+				Name:  "variant_",
+				Types: []string{"name", "uint32"},
+			},
+		},
+		Structs: []StructDef{
+			{
+				Name: "root",
+				Fields: []FieldDef{
+					{Name: "name", Type: "my_variant"},
+				},
+			},
+		},
+	}
+
+	buffer, err := hex.DecodeString("00000050df45e3aec2")
+	require.NoError(t, err)
+
+	json, err := abi.decode(NewDecoder(buffer), "root")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"name":"serialize"}`, string(json))
+
+	buffer, err = hex.DecodeString("0164000000")
+	require.NoError(t, err)
+
+	json, err = abi.decode(NewDecoder(buffer), "root")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"name":100}`, string(json))
+}
+
+func TestABI_decode_BinaryExtension(t *testing.T) {
+	abi := &ABI{
+		Structs: []StructDef{
+			{
+				Name: "root",
+				Fields: []FieldDef{
+					{Name: "id", Type: "uint8"},
+					{Name: "name", Type: "name$"},
+				},
+			},
+		},
+	}
+
+	json, err := abi.decode(NewDecoder(HexString("00")), "root")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"id":0}`, string(json))
+
+	json, err = abi.decode(NewDecoder(HexString("000000000000a0a499")), "root")
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{"id":0,"name":"name"}`, string(json))
+}
+
 func TestABI_decodeFields(t *testing.T) {
 	types := []ABIType{
 		{NewTypeName: "action.type.1", Type: "name"},
@@ -629,18 +764,46 @@ func TestABI_Read_TimePointSec(t *testing.T) {
 	assert.Equal(t, `{"name":"2018-10-30T18:06:09"}`, string(out))
 }
 
+func TestABI_Read_Symbol(t *testing.T) {
+	abi := ABI{}
+	data, err := hex.DecodeString("04454f5300000000")
+	require.NoError(t, err)
+
+	out, err := abi.decodeField(NewDecoder(data), "name", "symbol", false, false, []byte("{}"))
+	require.NoError(t, err)
+	assert.Equal(t, `{"name":"4,EOS"}`, string(out))
+}
+
 func TestABIDecoder_analyseFieldType(t *testing.T) {
-
-	testCases := []map[string]interface{}{
-		{"fieldType": "field.type.1", "expectedName": "field.type.1", "expectedOptional": false, "expectedArray": false},
-		{"fieldType": "field.type.1?", "expectedName": "field.type.1", "expectedOptional": true, "expectedArray": false},
-		{"fieldType": "field.type.1[]", "expectedName": "field.type.1", "expectedOptional": false, "expectedArray": true},
+	testCases := []struct {
+		fieldType               string
+		expectedName            string
+		expectedOptional        bool
+		expectedArray           bool
+		expectedBinaryExtension bool
+	}{
+		{"field.type.1", "field.type.1", false, false, false},
+		{"field.type.1?", "field.type.1", true, false, false},
+		{"field.type.1[]", "field.type.1", false, true, false},
+		{"field.type.1$", "field.type.1", false, false, true},
 	}
 
-	for _, c := range testCases {
-		name, isOption, isArray := analyzeFieldType(c["fieldType"].(string))
-		assert.Equal(t, c["expectedName"], name)
-		assert.Equal(t, c["expectedOptional"], isOption)
-		assert.Equal(t, c["expectedArray"], isArray)
+	for i, test := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			name, isOptional, isArray, isBinaryExtension := analyzeFieldType(test.fieldType)
+			assert.Equal(t, test.expectedName, name)
+			assert.Equal(t, test.expectedOptional, isOptional)
+			assert.Equal(t, test.expectedArray, isArray)
+			assert.Equal(t, test.expectedBinaryExtension, isBinaryExtension)
+		})
 	}
+}
+
+func HexString(input string) []byte {
+	buffer, err := hex.DecodeString(input)
+	if err != nil {
+		panic(err)
+	}
+
+	return buffer
 }
