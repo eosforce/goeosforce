@@ -1,7 +1,7 @@
 package rex
 
 import (
-	eos "github.com/eoscanada/eos-go"
+	eos "github.com/eosforce/goeosforce"
 )
 
 func NewMoveFromSavings(owner eos.AccountName, rex eos.Asset) *eos.Action {
