@@ -232,6 +232,14 @@ type Symbol struct {
 	symbolCode uint64
 }
 
+func NewSymbolFromUint64(value uint64) (out Symbol) {
+	out.Precision = uint8(value & 0xFF)
+	out.symbolCode = value >> 8
+	out.Symbol = SymbolCode(out.symbolCode).String()
+
+	return
+}
+
 func NameToSymbol(name Name) (Symbol, error) {
 	symbol := Symbol{}
 	value, err := StringToName(string(name))
@@ -240,7 +248,8 @@ func NameToSymbol(name Name) (Symbol, error) {
 	}
 
 	symbol.Precision = uint8(value & 0xFF)
-	symbol.Symbol = SymbolCode(value >> 8).String()
+	symbol.symbolCode = value >> 8
+	symbol.Symbol = SymbolCode(symbol.symbolCode).String()
 
 	return symbol, nil
 }
@@ -358,6 +367,10 @@ func (sc SymbolCode) String() string {
 	}
 
 	return builder.String()
+}
+
+func (sc SymbolCode) MarshalJSON() (data []byte, err error) {
+	return []byte(`"` + sc.String() + `"`), nil
 }
 
 // EOSSymbol represents the standard EOS symbol on the chain.  It's
@@ -783,7 +796,11 @@ type BlockTimestamp struct {
 const BlockTimestampFormat = "2006-01-02T15:04:05.999"
 
 func (t BlockTimestamp) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("%q", t.Format(BlockTimestampFormat))), nil
+	strTime := t.Format(BlockTimestampFormat)
+	if len(strTime) == len("2006-01-02T15:04:05.5") {
+		strTime += "00"
+	}
+	return []byte(fmt.Sprintf("%q", strTime)), nil
 }
 
 func (t *BlockTimestamp) UnmarshalJSON(data []byte) (err error) {
