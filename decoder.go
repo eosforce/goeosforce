@@ -793,7 +793,7 @@ func (d *Decoder) ReadBlockTimestamp() (out BlockTimestamp, err error) {
 	n, err := d.ReadUint32()
 	milliseconds := int64(n)*3000 + 946684800000
 
-	out.Time = time.Unix(0, milliseconds*1000*1000)
+	out.Time = time.Unix(0, milliseconds*1000*1000).UTC()
 	if loggingEnabled {
 		decoderLog.Debug("read block timestamp", zap.Time("time", out.Time))
 	}

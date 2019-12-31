@@ -796,9 +796,10 @@ type BlockTimestamp struct {
 const BlockTimestampFormat = "2006-01-02T15:04:05.999"
 
 func (t BlockTimestamp) MarshalJSON() ([]byte, error) {
-	strTime := t.Format(BlockTimestampFormat)
+	strTime := t.UTC().Format(BlockTimestampFormat)
+	// in eosforce there is 3000 ms a block
 	if len(strTime) == len("2006-01-02T15:04:05.5") {
-		strTime += "00"
+		strTime += "00" // no need delete
 	}
 	return []byte(fmt.Sprintf("%q", strTime)), nil
 }
@@ -808,10 +809,12 @@ func (t *BlockTimestamp) UnmarshalJSON(data []byte) (err error) {
 		return nil
 	}
 
-	t.Time, err = time.Parse(`"`+BlockTimestampFormat+`"`, string(data))
+	t.Time, err = time.ParseInLocation(`"`+BlockTimestampFormat+`"`, string(data), time.UTC)
 	if err != nil {
 		t.Time, err = time.Parse(`"`+BlockTimestampFormat+`Z07:00"`, string(data))
 	}
+
+	t.Time = t.Time.UTC()
 	return err
 }
 
