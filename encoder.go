@@ -458,7 +458,7 @@ func (e *Encoder) writeBlockTimestamp(bt BlockTimestamp) (err error) {
 	}
 
 	milliseconds := bt.UnixNano() / time.Millisecond.Nanoseconds()
-	slot := (milliseconds - 946684800000) / 500
+	slot := (milliseconds - 946684800000) / 3000
 
 	return e.writeUint32(uint32(slot))
 }

@@ -788,10 +788,10 @@ func (d *Decoder) ReadBlockTimestamp() (out BlockTimestamp, err error) {
 		return
 	}
 
-	// Encoded value of block timestamp is the slot, which represents the amount of 500 ms that
+	// Encoded value of block timestamp is the slot, which represents the amount of 3000 ms (in eosc it is different between eosio) that
 	// has elapsed since block epoch which is Januaray 1st, 2000 (946684800000 Unix Timestamp Milliseconds)
 	n, err := d.ReadUint32()
-	milliseconds := int64(n)*500 + 946684800000
+	milliseconds := int64(n)*3000 + 946684800000
 
 	out.Time = time.Unix(0, milliseconds*1000*1000)
 	if loggingEnabled {
