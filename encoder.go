@@ -7,10 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"time"
-
-	"math"
 
 	"github.com/eosforce/goeosforce/ecc"
 	"go.uber.org/zap"
@@ -43,6 +42,12 @@ func (e *Encoder) writeName(name Name) error {
 
 func (e *Encoder) Encode(v interface{}) (err error) {
 	switch cv := v.(type) {
+	case BaseVariant:
+		err = e.writeUVarInt(int(cv.TypeID))
+		if err != nil {
+			return
+		}
+		return e.Encode(cv.Impl)
 	case Name:
 		return e.writeName(cv)
 	case AccountName:
@@ -139,12 +144,6 @@ func (e *Encoder) Encode(v interface{}) (err error) {
 		return e.writeUint64(uint64(cv))
 	case Asset:
 		return e.writeAsset(cv)
-	// case *OptionalProducerSchedule:
-	// 	isPresent := cv != nil
-	// 	e.writeBool(isPresent)
-	// 	if isPresent {
-
-	// 	}
 	case ActionData:
 		return e.writeActionData(cv)
 	case *ActionData:
@@ -231,6 +230,29 @@ func (e *Encoder) Encode(v interface{}) (err error) {
 				}
 			}
 
+		case reflect.Map:
+			keyCount := len(rv.MapKeys())
+
+			if loggingEnabled {
+				encoderLog.Debug("encode: map", zap.Int("key_count", keyCount), typeField("key_type", t.Key()), typeField("value_type", rv.Elem()))
+				defer func(prev *zap.Logger) { encoderLog = prev }(encoderLog)
+				encoderLog = encoderLog.Named("struct")
+			}
+
+			if err = e.writeUVarInt(keyCount); err != nil {
+				return
+			}
+
+			for _, mapKey := range rv.MapKeys() {
+				if err = e.Encode(mapKey.Interface()); err != nil {
+					return
+				}
+
+				if err = e.Encode(rv.MapIndex(mapKey).Interface()); err != nil {
+					return
+				}
+			}
+
 		default:
 			return errors.New("Encode: unsupported type " + t.String())
 		}
@@ -302,7 +324,7 @@ func (e *Encoder) writeUint16(i uint16) (err error) {
 	if loggingEnabled {
 		encoderLog.Debug("write uint16", zap.Uint16("val", i))
 	}
-	buf := make([]byte, TypeSize.UInt16)
+	buf := make([]byte, TypeSize.Uint16)
 	binary.LittleEndian.PutUint16(buf, i)
 	return e.toWriter(buf)
 }
@@ -325,7 +347,7 @@ func (e *Encoder) writeUint32(i uint32) (err error) {
 	if loggingEnabled {
 		encoderLog.Debug("write uint32", zap.Uint32("val", i))
 	}
-	buf := make([]byte, TypeSize.UInt32)
+	buf := make([]byte, TypeSize.Uint32)
 	binary.LittleEndian.PutUint32(buf, i)
 	return e.toWriter(buf)
 }
@@ -341,7 +363,7 @@ func (e *Encoder) writeUint64(i uint64) (err error) {
 	if loggingEnabled {
 		encoderLog.Debug("write uint64", zap.Uint64("val", i))
 	}
-	buf := make([]byte, TypeSize.UInt64)
+	buf := make([]byte, TypeSize.Uint64)
 	binary.LittleEndian.PutUint64(buf, i)
 	return e.toWriter(buf)
 }
@@ -350,9 +372,9 @@ func (e *Encoder) writeUint128(i Uint128) (err error) {
 	if loggingEnabled {
 		encoderLog.Debug("write uint128", zap.Stringer("hex", i), zap.Uint64("lo", i.Lo), zap.Uint64("hi", i.Hi))
 	}
-	buf := make([]byte, TypeSize.UInt128)
+	buf := make([]byte, TypeSize.Uint128)
 	binary.LittleEndian.PutUint64(buf, i.Lo)
-	binary.LittleEndian.PutUint64(buf[TypeSize.UInt64:], i.Hi)
+	binary.LittleEndian.PutUint64(buf[TypeSize.Uint64:], i.Hi)
 	return e.toWriter(buf)
 }
 
@@ -361,7 +383,7 @@ func (e *Encoder) writeFloat32(f float32) (err error) {
 		encoderLog.Debug("write float32", zap.Float32("val", f))
 	}
 	i := math.Float32bits(f)
-	buf := make([]byte, TypeSize.UInt32)
+	buf := make([]byte, TypeSize.Uint32)
 	binary.LittleEndian.PutUint32(buf, i)
 
 	return e.toWriter(buf)
@@ -371,7 +393,7 @@ func (e *Encoder) writeFloat64(f float64) (err error) {
 		encoderLog.Debug("write float64", zap.Float64("val", f))
 	}
 	i := math.Float64bits(f)
-	buf := make([]byte, TypeSize.UInt64)
+	buf := make([]byte, TypeSize.Uint64)
 	binary.LittleEndian.PutUint64(buf, i)
 
 	return e.toWriter(buf)
@@ -418,8 +440,10 @@ func (e *Encoder) writePublicKey(pk ecc.PublicKey) (err error) {
 	if loggingEnabled {
 		encoderLog.Debug("write public key", zap.Stringer("pubkey", pk))
 	}
-	if len(pk.Content) != 33 {
-		return fmt.Errorf("public key %q should be 33 bytes, was %d", hex.EncodeToString(pk.Content), len(pk.Content))
+
+	err = pk.Validate()
+	if err != nil {
+		return fmt.Errorf("invalid public key: %s", err)
 	}
 
 	if err = e.writeByte(byte(pk.Curve)); err != nil {
@@ -433,15 +457,17 @@ func (e *Encoder) writeSignature(s ecc.Signature) (err error) {
 	if loggingEnabled {
 		encoderLog.Debug("write signature", zap.Stringer("sig", s))
 	}
-	if len(s.Content) != 65 {
-		return fmt.Errorf("signature should be 65 bytes, was %d", len(s.Content))
+
+	err = s.Validate()
+	if err != nil {
+		return fmt.Errorf("invalid signature: %s", err)
 	}
 
 	if err = e.writeByte(byte(s.Curve)); err != nil {
 		return
 	}
 
-	return e.toWriter(s.Content) // should write 65 bytes
+	return e.toWriter(s.Content)
 }
 
 func (e *Encoder) writeTstamp(t Tstamp) (err error) {
