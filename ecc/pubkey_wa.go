@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/eoscanada/eos-go/btcsuite/btcd/btcec"
+	"github.com/eosforce/goeosforce/btcsuite/btcd/btcec"
 )
 
 type innerWAPublicKey struct {

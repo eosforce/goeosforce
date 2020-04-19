@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/eoscanada/eos-go/ecc"
+	"github.com/eosforce/goeosforce/ecc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

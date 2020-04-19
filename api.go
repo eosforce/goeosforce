@@ -550,8 +550,8 @@ func (api *API) GetCurrencyBalance(ctx context.Context, account AccountName, sym
 }
 
 // GetFee call /get_required_fee to get fee
-func (api *API) GetFee(tx *Transaction) (out *GetFeeResp, err error) {
-	err = api.call("chain", "get_required_fee", M{"transaction": tx}, &out)
+func (api *API) GetFee(ctx context.Context, tx *Transaction) (out *GetFeeResp, err error) {
+	err = api.call(ctx, "chain", "get_required_fee", M{"transaction": tx}, &out)
 	return
 }
 

@@ -1,7 +1,7 @@
 package ship
 
 import (
-	"github.com/eoscanada/eos-go"
+	eos "github.com/eosforce/goeosforce"
 )
 
 // Request
