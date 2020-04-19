@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/eosforce/goeosforce/ecc"
+	"github.com/tidwall/gjson"
 )
 
 var symbolRegex = regexp.MustCompile("^[0-9],[A-Z]{1,7}$")
@@ -1080,4 +1081,87 @@ func (b Blob) Data() ([]byte, error) {
 // String returns the blob as a string
 func (b Blob) String() string {
 	return string(b)
+}
+
+//
+/// Variant (emulates `fc::variant` type)
+//
+
+type Variant interface {
+	Assign(typeID uint, impl interface{})
+	Obtain() (typeID uint, impl interface{})
+}
+
+type VariantImplFactory = func() interface{}
+type OnVariant = func(impl interface{}) error
+
+type BaseVariant struct {
+	TypeID uint32
+	Impl   interface{}
+}
+
+func (a *BaseVariant) Assign(typeID uint32, impl interface{}) {
+	a.TypeID = typeID
+	a.Impl = impl
+}
+
+func (a *BaseVariant) Obtain() (typeID uint32, impl interface{}) {
+	return uint32(a.TypeID), a.Impl
+}
+
+func (a *BaseVariant) DoFor(doers map[uint32]OnVariant) error {
+	if doer, found := doers[a.TypeID]; found {
+		return doer(a.Impl)
+	}
+
+	return fmt.Errorf("to doer found for typeID %d", a.TypeID)
+}
+
+func (a *BaseVariant) MarshalJSON() ([]byte, error) {
+	elements := []interface{}{a.TypeID, a.Impl}
+	return json.Marshal(elements)
+}
+
+func (a *BaseVariant) UnmarshalJSON(data []byte, newImplPointer map[uint32]VariantImplFactory) error {
+	typeIDResult := gjson.GetBytes(data, "0")
+	implResult := gjson.GetBytes(data, "1")
+
+	if !typeIDResult.Exists() || !implResult.Exists() {
+		return fmt.Errorf("invalid format, expected '[<typeID>, <impl>]' pair, got %q", string(data))
+	}
+
+	a.TypeID = uint32(typeIDResult.Uint())
+	implFactory := newImplPointer[a.TypeID]
+	if implFactory == nil {
+		return fmt.Errorf("newImplPointer should have returned an non-nil pointer for type %d", a.TypeID)
+	}
+
+	a.Impl = implFactory()
+	err := json.Unmarshal([]byte(implResult.Raw), a.Impl)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (a *BaseVariant) UnmarshalBinaryVariant(decoder *Decoder, newImplPointer map[uint32]VariantImplFactory) error {
+	typeID, err := decoder.ReadUvarint32()
+	if err != nil {
+		return fmt.Errorf("unable to read variant type ID: %s", err)
+	}
+
+	a.TypeID = uint32(typeID)
+	implFactory := newImplPointer[a.TypeID]
+	if implFactory == nil {
+		return fmt.Errorf("newImplPointer should have returned an non-nil pointer for type %d", a.TypeID)
+	}
+
+	a.Impl = implFactory()
+	err = decoder.Decode(a.Impl)
+	if err != nil {
+		return fmt.Errorf("unable to decode variant type %d: %s", typeID, err)
+	}
+
+	return nil
 }

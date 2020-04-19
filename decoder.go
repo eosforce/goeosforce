@@ -2,63 +2,103 @@ package eos
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
-	"math"
-
-	"time"
-
-	"errors"
-	"reflect"
-
-	"strings"
-
 	"io/ioutil"
+	"math"
+	"reflect"
+	"strings"
+	"time"
 
 	"github.com/eosforce/goeosforce/ecc"
 	"go.uber.org/zap"
 )
 
+// UnmarshalerBinary is the interface implemented by types
+// that can unmarshal an EOSIO binary description of themselves.
+//
+// **Warning** This is experimental, exposed only for internal usage for now.
+type UnmarshalerBinary interface {
+	UnmarshalBinary(decoder *Decoder) error
+}
+
 var TypeSize = struct {
-	Byte           int
-	Int8           int
-	UInt8          int
-	UInt16         int
-	Int16          int
-	UInt32         int
-	UInt64         int
-	UInt128        int
-	Float32        int
-	Float64        int
-	Checksum160    int
-	Checksum256    int
-	Checksum512    int
-	PublicKey      int
-	Signature      int
+	Bool int
+	Byte int
+
+	Int8  int
+	Int16 int
+
+	Uint8   int
+	Uint16  int
+	Uint32  int
+	Uint64  int
+	Uint128 int
+
+	Float32 int
+	Float64 int
+
+	Checksum160 int
+	Checksum256 int
+	Checksum512 int
+
+	PublicKey int
+	Signature int
+
 	Tstamp         int
 	BlockTimestamp int
-	CurrencyName   int
-	Bool           int
+
+	CurrencyName int
+
+	// Deprecated Fields
+
+	// Deprecated: use Uint8 instead
+	UInt8 int
+	// Deprecated: use Uint16 instead
+	UInt16 int
+	// Deprecated: use Uint32 instead
+	UInt32 int
+	// Deprecated: use Uint64 instead
+	UInt64 int
+	// Deprecated: use Uint128 instead
+	UInt128 int
 }{
-	Byte:           1,
-	Int8:           1,
-	UInt8:          1,
-	UInt16:         2,
-	Int16:          2,
-	UInt32:         4,
-	UInt64:         8,
-	UInt128:        16,
-	Float32:        4,
-	Float64:        8,
-	Checksum160:    20,
-	Checksum256:    32,
-	Checksum512:    64,
-	PublicKey:      34,
-	Signature:      66,
+	Byte: 1,
+	Bool: 1,
+
+	Int8:  1,
+	Int16: 2,
+
+	Uint8:   1,
+	Uint16:  2,
+	Uint32:  4,
+	Uint64:  8,
+	Uint128: 16,
+
+	Float32: 4,
+	Float64: 8,
+
+	Checksum160: 20,
+	Checksum256: 32,
+	Checksum512: 64,
+
+	PublicKey: 34,
+	Signature: 66,
+
 	Tstamp:         8,
 	BlockTimestamp: 4,
-	CurrencyName:   7,
-	Bool:           1,
+
+	CurrencyName: 7,
+}
+
+func init() {
+	// Deprecated fields initialization
+	TypeSize.UInt8 = TypeSize.Uint8
+	TypeSize.UInt16 = TypeSize.Uint16
+	TypeSize.UInt32 = TypeSize.Uint32
+	TypeSize.UInt64 = TypeSize.Uint64
+	TypeSize.UInt128 = TypeSize.Uint128
 }
 
 var RegisteredActions = map[AccountName]map[ActionName]reflect.Type{}
@@ -98,7 +138,20 @@ func (d *Decoder) DecodeActions(decode bool) {
 	d.decodeActions = decode
 }
 
-func (d *Decoder) Decode(v interface{}) (err error) {
+type DecodeOption = interface{}
+
+type optionalFieldType bool
+
+const OptionalField optionalFieldType = true
+
+func (d *Decoder) Decode(v interface{}, options ...DecodeOption) (err error) {
+	optionalField := false
+	for _, option := range options {
+		if _, isOptionalField := option.(optionalFieldType); isOptionalField {
+			optionalField = true
+		}
+	}
+
 	rv := reflect.Indirect(reflect.ValueOf(v))
 	if !rv.CanAddr() {
 		return errors.New("decode, can only Decode to pointer type")
@@ -106,20 +159,51 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 	t := rv.Type()
 
 	if loggingEnabled {
-		decoderLog.Debug("decode type", typeField("type", v))
+		decoderLog.Debug("decode type", typeField("type", v), zap.Bool("optional", optionalField))
 	}
+
 	if !rv.CanAddr() {
 		return errors.New("binary: can only Decode to pointer type")
+	}
+
+	if optionalField {
+		isPresent, e := d.ReadByte()
+		if e != nil {
+			err = fmt.Errorf("decode: %t isPresent, %s", v, e)
+			return
+		}
+
+		if isPresent == 0 {
+			if loggingEnabled {
+				decoderLog.Debug("skipping optional", typeField("type", v))
+			}
+
+			rv.Set(reflect.Zero(t))
+			return
+		}
 	}
 
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 		newRV := reflect.New(t)
 		rv.Set(newRV)
+
+		// At this point, `newRV` is a pointer to our target type, we need to check here because
+		// after that, when `reflect.Indirect` is used, we get a `**<Type>` instead of a `*<Type>`
+		// which breaks the interface checking.
+		//
+		// Ultimetaly, I think this could should be re-written, I don't think the `**<Type>` is necessary.
+		if u, ok := newRV.Interface().(UnmarshalerBinary); ok {
+			if loggingEnabled {
+				decoderLog.Debug("using UnmarshalBinary method to decode type", typeField("type", v))
+			}
+			return u.UnmarshalBinary(d)
+		}
+
 		rv = reflect.Indirect(newRV)
 	}
 
-	switch realV := v.(type) {
+	switch v.(type) {
 	case *string:
 		s, e := d.ReadString()
 		if e != nil {
@@ -141,6 +225,11 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 		var n byte
 		n, err = d.ReadByte()
 		rv.SetUint(uint64(n))
+		return
+	case *int8:
+		var n int8
+		n, err = d.ReadInt8()
+		rv.SetInt(int64(n))
 		return
 	case *int16:
 		var n int16
@@ -262,12 +351,16 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 		cur, err = d.ReadCurrencyName()
 		rv.Set(reflect.ValueOf(cur))
 		return
+	case *Symbol:
+		var symbol *Symbol
+		symbol, err = d.ReadSymbol()
+		rv.Set(reflect.ValueOf(*symbol))
+		return
 	case *Asset:
 		var asset Asset
 		asset, err = d.ReadAsset()
 		rv.Set(reflect.ValueOf(asset))
 		return
-
 	case *TransactionWithID:
 
 		t, e := d.ReadByte()
@@ -299,21 +392,6 @@ func (d *Decoder) Decode(v interface{}) (err error) {
 			trx := TransactionWithID{Packed: packedTrx}
 			rv.Set(reflect.ValueOf(trx))
 			return nil
-		}
-
-	case **OptionalProducerSchedule:
-		isPresent, e := d.ReadByte()
-		if e != nil {
-			err = fmt.Errorf("decode: OptionalProducerSchedule isPresent, %s", e)
-			return
-		}
-
-		if isPresent == 0 {
-			if loggingEnabled {
-				decoderLog.Debug("skipping optional OptionalProducerSchedule")
-			}
-			*realV = nil
-			return
 		}
 
 	case **Action:
@@ -435,7 +513,13 @@ func (d *Decoder) decodeStruct(v interface{}, t reflect.Type, rv reflect.Value) 
 			if loggingEnabled {
 				decoderLog.Debug("field", zap.String("name", typeField.Name))
 			}
-			if err = d.Decode(iface); err != nil {
+
+			var options []DecodeOption
+			if tag == "optional" {
+				options = append(options, OptionalField)
+			}
+
+			if err = d.Decode(iface, options...); err != nil {
 				return
 			}
 		}
@@ -513,7 +597,7 @@ func (d *Decoder) ReadByteArray() (out []byte, err error) {
 
 func (d *Decoder) ReadByte() (out byte, err error) {
 	if d.remaining() < TypeSize.Byte {
-		err = fmt.Errorf("byte required [1] byte, remaining [%d]", d.remaining())
+		err = fmt.Errorf("required [1] byte, remaining [%d]", d.remaining())
 		return
 	}
 
@@ -544,10 +628,16 @@ func (d *Decoder) ReadBool() (out bool, err error) {
 
 }
 
-func (d *Decoder) ReadUInt8() (out uint8, err error) {
+func (d *Decoder) ReadUint8() (out uint8, err error) {
 	out, err = d.ReadByte()
 	return
 }
+
+// Deprecated: Use `ReadUint8` (with a lower case `i`) instead
+func (d *Decoder) ReadUInt8() (out uint8, err error) {
+	return d.ReadUint8()
+}
+
 func (d *Decoder) ReadInt8() (out int8, err error) {
 	b, err := d.ReadByte()
 	out = int8(b)
@@ -558,13 +648,13 @@ func (d *Decoder) ReadInt8() (out int8, err error) {
 }
 
 func (d *Decoder) ReadUint16() (out uint16, err error) {
-	if d.remaining() < TypeSize.UInt16 {
-		err = fmt.Errorf("uint16 required [%d] bytes, remaining [%d]", TypeSize.UInt16, d.remaining())
+	if d.remaining() < TypeSize.Uint16 {
+		err = fmt.Errorf("uint16 required [%d] bytes, remaining [%d]", TypeSize.Uint16, d.remaining())
 		return
 	}
 
 	out = binary.LittleEndian.Uint16(d.data[d.pos:])
-	d.pos += TypeSize.UInt16
+	d.pos += TypeSize.Uint16
 	if loggingEnabled {
 		decoderLog.Debug("read uint16", zap.Uint16("val", out))
 	}
@@ -589,13 +679,13 @@ func (d *Decoder) ReadInt64() (out int64, err error) {
 }
 
 func (d *Decoder) ReadUint32() (out uint32, err error) {
-	if d.remaining() < TypeSize.UInt32 {
-		err = fmt.Errorf("uint32 required [%d] bytes, remaining [%d]", TypeSize.UInt32, d.remaining())
+	if d.remaining() < TypeSize.Uint32 {
+		err = fmt.Errorf("uint32 required [%d] bytes, remaining [%d]", TypeSize.Uint32, d.remaining())
 		return
 	}
 
 	out = binary.LittleEndian.Uint32(d.data[d.pos:])
-	d.pos += TypeSize.UInt32
+	d.pos += TypeSize.Uint32
 	if loggingEnabled {
 		decoderLog.Debug("read uint32", zap.Uint32("val", out))
 	}
@@ -611,14 +701,14 @@ func (d *Decoder) ReadInt32() (out int32, err error) {
 }
 
 func (d *Decoder) ReadUint64() (out uint64, err error) {
-	if d.remaining() < TypeSize.UInt64 {
-		err = fmt.Errorf("uint64 required [%d] bytes, remaining [%d]", TypeSize.UInt64, d.remaining())
+	if d.remaining() < TypeSize.Uint64 {
+		err = fmt.Errorf("uint64 required [%d] bytes, remaining [%d]", TypeSize.Uint64, d.remaining())
 		return
 	}
 
-	data := d.data[d.pos : d.pos+TypeSize.UInt64]
+	data := d.data[d.pos : d.pos+TypeSize.Uint64]
 	out = binary.LittleEndian.Uint64(data)
-	d.pos += TypeSize.UInt64
+	d.pos += TypeSize.Uint64
 	if loggingEnabled {
 		decoderLog.Debug("read uint64", zap.Uint64("val", out), zap.Stringer("hex", HexBytes(data)))
 	}
@@ -626,16 +716,16 @@ func (d *Decoder) ReadUint64() (out uint64, err error) {
 }
 
 func (d *Decoder) ReadUint128(typeName string) (out Uint128, err error) {
-	if d.remaining() < TypeSize.UInt128 {
-		err = fmt.Errorf("%s required [%d] bytes, remaining [%d]", typeName, TypeSize.UInt128, d.remaining())
+	if d.remaining() < TypeSize.Uint128 {
+		err = fmt.Errorf("%s required [%d] bytes, remaining [%d]", typeName, TypeSize.Uint128, d.remaining())
 		return
 	}
 
-	data := d.data[d.pos : d.pos+TypeSize.UInt128]
+	data := d.data[d.pos : d.pos+TypeSize.Uint128]
 	out.Lo = binary.LittleEndian.Uint64(data)
 	out.Hi = binary.LittleEndian.Uint64(data[8:])
 
-	d.pos += TypeSize.UInt128
+	d.pos += TypeSize.Uint128
 	if loggingEnabled {
 		decoderLog.Debug("read uint128", zap.Stringer("hex", out), zap.Uint64("lo", out.Lo), zap.Uint64("lo", out.Lo))
 	}
@@ -727,44 +817,157 @@ func (d *Decoder) ReadChecksum512() (out Checksum512, err error) {
 }
 
 func (d *Decoder) ReadPublicKey() (out ecc.PublicKey, err error) {
-
-	if d.remaining() < TypeSize.PublicKey {
-		err = fmt.Errorf("publicKey required [%d] bytes, remaining [%d]", TypeSize.PublicKey, d.remaining())
-		return
-	}
-	keyContent := make([]byte, 34)
-	copy(keyContent, d.data[d.pos:d.pos+TypeSize.PublicKey])
-
-	out, err = ecc.NewPublicKeyFromData(keyContent)
+	typeID, err := d.ReadUint8()
 	if err != nil {
-		err = fmt.Errorf("publicKey: key from data: %s", err)
+		return out, fmt.Errorf("unable to read public key type: %s", err)
 	}
 
-	d.pos += TypeSize.PublicKey
+	curveID := ecc.CurveID(typeID)
+	var keyMaterial []byte
+
+	if curveID == ecc.CurveK1 || curveID == ecc.CurveR1 {
+		// Minus 1 because we already read the curveID which is 1 out of the 34 bytes of a full "legacy" PublicKey
+		keyMaterial, err = d.readPublicKeyMaterial(curveID, TypeSize.PublicKey-1)
+	} else if curveID == ecc.CurveWA {
+		keyMaterial, err = d.readWAPublicKeyMaterial()
+	} else {
+		err = fmt.Errorf("unsupported curve ID: %s", curveID)
+	}
+
+	if err != nil {
+		return out, fmt.Errorf("unable to read public key material for curve %s: %s", curveID, err)
+	}
+
+	data := append([]byte{byte(curveID)}, keyMaterial...)
+	out, err = ecc.NewPublicKeyFromData(data)
+	if err != nil {
+		return out, fmt.Errorf("new public key from data: %s", err)
+	}
+
 	if loggingEnabled {
 		decoderLog.Debug("read public key", zap.Stringer("pubkey", out))
 	}
+
+	return
+}
+
+func (d *Decoder) readPublicKeyMaterial(curveID ecc.CurveID, keyMaterialSize int) (out []byte, err error) {
+	if d.remaining() < keyMaterialSize {
+		err = fmt.Errorf("publicKey %s key material requires [%d] bytes, remaining [%d]", curveID, keyMaterialSize, d.remaining())
+		return
+	}
+
+	out = make([]byte, keyMaterialSize)
+	copy(out, d.data[d.pos:d.pos+keyMaterialSize])
+	d.pos += keyMaterialSize
+
+	return
+}
+
+func (d *Decoder) readWAPublicKeyMaterial() (out []byte, err error) {
+	begin := d.pos
+	if d.remaining() < 35 {
+		err = fmt.Errorf("publicKey WA key material requires at least [35] bytes, remaining [%d]", d.remaining())
+		return
+	}
+
+	d.pos += 34
+	remainderDataSize, err := d.ReadUvarint32()
+	if err != nil {
+		return out, fmt.Errorf("unable to read public key WA key material size: %s", err)
+	}
+
+	if d.remaining() < int(remainderDataSize) {
+		err = fmt.Errorf("publicKey WA remainder key material requires [%d] bytes, remaining [%d]", remainderDataSize, d.remaining())
+		return
+	}
+
+	d.pos += int(remainderDataSize)
+	keyMaterialSize := d.pos - begin
+
+	out = make([]byte, keyMaterialSize)
+	copy(out, d.data[begin:begin+keyMaterialSize])
+
 	return
 }
 
 func (d *Decoder) ReadSignature() (out ecc.Signature, err error) {
-	if d.remaining() < TypeSize.Signature {
-		err = fmt.Errorf("signature required [%d] bytes, remaining [%d]", TypeSize.Signature, d.remaining())
-		return
+	typeID, err := d.ReadUint8()
+	if err != nil {
+		return out, fmt.Errorf("unable to read signature type: %s", err)
 	}
 
-	sigContent := make([]byte, 66)
-	copy(sigContent, d.data[d.pos:d.pos+TypeSize.Signature])
+	curveID := ecc.CurveID(typeID)
+	var data []byte
 
-	out, err = ecc.NewSignatureFromData(sigContent)
+	if curveID == ecc.CurveK1 || curveID == ecc.CurveR1 {
+		// Minus 1 because we already read the curveID which is 1 out of the 34 bytes of a full "legacy" PublicKey
+		if d.remaining() < TypeSize.Signature-1 {
+			return out, fmt.Errorf("signature required [%d] bytes, remaining [%d]", TypeSize.Signature-1, d.remaining())
+		}
+
+		data = make([]byte, 66)
+		data[0] = byte(curveID)
+		copy(data[1:], d.data[d.pos:d.pos+TypeSize.Signature-1])
+		d.pos += TypeSize.Signature - 1
+	} else if curveID == ecc.CurveWA {
+		data, err = d.readWASignatureData()
+		if err != nil {
+			return out, fmt.Errorf("unable to read WA signature: %s", err)
+		}
+	} else {
+		return out, fmt.Errorf("unsupported curve ID: %s", curveID)
+	}
+
+	out, err = ecc.NewSignatureFromData(data)
 	if err != nil {
 		return out, fmt.Errorf("new signature: %s", err)
 	}
 
-	d.pos += TypeSize.Signature
 	if loggingEnabled {
 		decoderLog.Debug("read signature", zap.Stringer("sig", out))
 	}
+
+	return
+}
+
+func (d *Decoder) readWASignatureData() (out []byte, err error) {
+	begin := d.pos
+	if d.remaining() < 66 {
+		err = fmt.Errorf("signature WA key material requires at least [66] bytes, remaining [%d]", d.remaining())
+		return
+	}
+
+	// Skip key recover param id (1 byte), R value (32 bytes) and S value (32 bytes)
+	d.pos += 65
+	authenticatorDataSize, err := d.ReadUvarint32()
+	if err != nil {
+		return out, fmt.Errorf("unable to read signature WA authenticator data size: %s", err)
+	}
+
+	if d.remaining() < int(authenticatorDataSize) {
+		err = fmt.Errorf("signature WA authenticator data requires [%d] bytes, remaining [%d]", authenticatorDataSize, d.remaining())
+		return
+	}
+	d.pos += int(authenticatorDataSize)
+
+	clientDataJSONSize, err := d.ReadUvarint32()
+	if err != nil {
+		return out, fmt.Errorf("unable to read signature WA client data JSON size: %s", err)
+	}
+
+	if d.remaining() < int(clientDataJSONSize) {
+		err = fmt.Errorf("signature WA client data JSON requires [%d] bytes, remaining [%d]", clientDataJSONSize, d.remaining())
+		return
+	}
+	d.pos += int(clientDataJSONSize)
+
+	signatureMaterialSize := d.pos - begin
+
+	out = make([]byte, signatureMaterialSize+1)
+	out[0] = byte(ecc.CurveWA)
+	copy(out[1:], d.data[begin:begin+signatureMaterialSize])
+
 	return
 }
 
